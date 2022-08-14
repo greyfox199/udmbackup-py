@@ -65,7 +65,7 @@ intSMTPPort = 587
 if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logsDirectory']):
     blnWriteToLog = True
     strTimeStamp = datetime.now().strftime("%Y-%m-%d-%H_%M_%S")
-    strDetailLogFilePath = str(jsonData['optional']['logsDirectory']) + "\\udmpro-backup-detail-" + strTimeStamp + ".log"
+    strDetailLogFilePath = str(jsonData['optional']['logsDirectory']) + "/udmpro-backup-detail-" + strTimeStamp + ".log"
     logging.basicConfig(filename=strDetailLogFilePath, format='%(asctime)s %(message)s', filemode='w')
     detailLogger=logging.getLogger()
     detailLogger.setLevel(logging.INFO)
