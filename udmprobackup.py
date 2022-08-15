@@ -77,6 +77,7 @@ blnBackupSuccessful = False
 blnWriteToLog = False
 intSMTPPort = 587
 lstErrors = []
+detailLogger = None
 
 #if the logs directory is present in the config and the directory exists, enable logging and create a log file
 if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logsDirectory']):
@@ -91,7 +92,8 @@ if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logs
 def LogWrite(detailLogger, strLogString, blnDisplayInConsole=True):
     if blnDisplayInConsole:
         print(strLogString)
-    detailLogger.info(strLogString)
+    if blnWriteToLog == True:
+        detailLogger.info(strLogString)
 
 #if daysToKeepUDMBackups is set and is a valid integer from 0 to 65534, attempt to use it for backup retention
 if "daysToKeepUDMBackups" in jsonData['optional']:
@@ -198,34 +200,34 @@ except:
 #if the backup was successful and intDaysToKeepUDMBackups is a valid non 0 integer, manage backup retention
 if blnBackupSuccessful == True and intDaysToKeepUDMBackups > 0:
     intXDaysAgo = time.time() - (intDaysToKeepUDMBackups * 86400)
-    strPathToCheck = jsonData['required']['localBackupDirectory'] + "\autobackup"
-    LogWrite(detailLogger, "Info: Purging backups older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
+    strPathToCheck = jsonData['required']['localBackupDirectory'] + "/autobackup"
+    LogWrite(detailLogger, "Info: Purging backups older than " + str(intDaysToKeepUDMBackups) + " days from " + strPathToCheck)
     try: 
-        for i in os-listdir(strPathToCheck):
+        for i in os.listdir(strPathToCheck):
             strFileToRemove = os.path.join(strPathToCheck, i)
 
             if os.stat(strFileToRemove).st_mtime <= intXDaysAgo:
                 if os.path.isfile(strFileToRemove):
-                    print(strFileToRemove)
+                    os.remove(strFileToRemove)
     except:
-        LogWrite(detailLogger, "Error: Failed to purge backup files older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
-        lstErrors.append("Failed to purge backup files older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
+        LogWrite(detailLogger, "Error: Failed to purge backup files older than " + str(intDaysToKeepUDMBackups) + " days from " + strPathToCheck)
+        lstErrors.append("Failed to purge backup files older than " + str(intDaysToKeepUDMBackups) + " days from " + strPathToCheck)
 
 #if intDaysToKeepLogFiles is a valid non 0 integer, manage log file retention
 if intDaysToKeepLogFiles > 0:
     intXDaysAgo = time.time() - (intDaysToKeepLogFiles * 86400)
     strPathToCheck = jsonData['optional']['logsDirectory']
-    LogWrite(detailLogger, "Info: Purging logs older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
+    LogWrite(detailLogger, "Info: Purging logs older than " + str(intDaysToKeepLogFiles) + " days from " + strPathToCheck)
     try:
-        for i in os-listdir(strPathToCheck):
+        for i in os.listdir(strPathToCheck):
             strFileToRemove = os.path.join(strPathToCheck, i)
 
             if os.stat(strFileToRemove).st_mtime <= intXDaysAgo:
                 if os.path.isfile(strFileToRemove):
-                    print(strFileToRemove)
+                    os.remove(strFileToRemove)
     except:
-        LogWrite(detailLogger, "Error: Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
-        lstErrors.append("Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
+        LogWrite(detailLogger, "Error: Failed to purge log files older than " + str(intDaysToKeepLogFiles) + " days from " + strPathToCheck)
+        lstErrors.append("Failed to purge log files older than " + str(intDaysToKeepLogFiles) + " days from " + strPathToCheck)
 
 #we logged errors to the lstErrors list, so if it has any entries and tempSMTPSendError is set to true, attempt to send email error report
 #we have a few checks if ssl is required or not
@@ -276,7 +278,40 @@ if tempSMTPSendError == "true" and len(lstErrors) > 0:
                 server.quit()
                 print('mail successfully sent')
                 LogWrite(detailLogger, "Info: Email error report successfully sent")
+        else:
+            #send unauthenticated message
+            if tempSMTPSSLRequired.lower() == "true":
+                #send unauthenticated message with ssl
 
+                msg = MIMEText(strEmailBody)
+
+                msg['Subject'] = '<<UDM Pro Backup>> Errors during process'
+                msg['From'] = tempSMTPUsername
+                msg['To'] = tempEmailRecipient
+
+
+                context = ssl.create_default_context()
+                with smtplib.SMTP(tempSMTPServer, intSMTPPort) as server:
+                    server.ehlo()  # Can be omitted
+                    server.starttls(context=context)
+                    server.ehlo()  # Can be omitted
+                    server.sendmail(tempSMTPUsername, tempEmailRecipient, msg.as_string())
+
+
+                LogWrite(detailLogger, "Info: Email error report successfully sent")
+            else:
+                #send unauthenticated message without ssl
+                msg = MIMEText(strEmailBody)
+
+                msg['Subject'] = '<<UDM Pro Backup>> Errors during process'
+                msg['From'] = tempSMTPUsername
+                msg['To'] = tempEmailRecipient
+
+                server.sendmail(tempSMTPUsername, tempEmailRecipient, msg.as_string())
+                server.quit()
+                print('mail successfully sent')
+                LogWrite(detailLogger, "Info: Email error report successfully sent")
+        
 #we're finally done with the process, so log one final entry marking completion
 LogWrite(detailLogger, "Info: Process Complete")
             
