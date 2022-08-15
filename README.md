@@ -4,10 +4,10 @@ this utility is used to backup a udm device to a location off the device itself.
 Requirements:  
 -Assumes root level access to the udm device  
 -Assumes auto backups have been configured on the udm device itself  
--Assumes remote host path can run python scripts (has only been tested on linux/ubuntu)
--assumes the python3-pip OS package is installed
--assumes the scp python module has been installed
--assumes the paramiko python module has been installed
+-Assumes remote host path can run python scripts (has only been tested on linux/ubuntu)   
+-Assumes the python3-pip OS package is installed   
+-Assumes the scp python module has been installed   
+-Assumes the paramiko python module has been installed   
 -Assumes scheduling is done via cron
 
 # install
