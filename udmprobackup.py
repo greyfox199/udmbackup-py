@@ -4,6 +4,12 @@ from os.path import exists
 import socket
 from datetime import datetime
 import logging
+import paramiko
+from paramiko import SSHClient
+from scp import SCPClient
+import os, time, shutil
+import smtplib, ssl
+from email.mime.text import MIMEText
 
 argumentList = sys.argv[1:]
  
@@ -20,7 +26,7 @@ try:
 
     for currentArgument, currentValue in arguments:
         if currentArgument in ("-h", "--Help"):
-            print ("Displaying Help")
+            print ("Usage: python udmprobackup.py -c /path/to/config.json")
              
         elif currentArgument in ("-c", "--ConfigFilePath"):
             ConfigFilePath = currentValue
@@ -42,6 +48,13 @@ except:
     exit()
 
 
+if "udmPassword" in jsonData["required"]:
+    try:
+        strUDMPassword = str(jsonData['required']['udmPassword'])
+    except:
+        print("required field for password to udm does not exist, aborting proces")
+        exit()
+
 if not exists(jsonData['required']['localBackupDirectory']):
     print("local backup path of " + jsonData['required']['localBackupDirectory'] + "does not exist, aborting process")
     exit()
@@ -61,6 +74,7 @@ blnSMTPAuthRequired = False
 blnBackupSuccessful = False
 blnWriteToLog = False
 intSMTPPort = 587
+lstErrors = []
 
 if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logsDirectory']):
     blnWriteToLog = True
@@ -122,6 +136,8 @@ if "sendEmailError" in jsonData['optional']:
         tempSMTPAuthRequied = str(jsonData['optional']['smtpauthrequired'])
         tempSMTPUsername = str(jsonData['optional']['smtpUsername'])
         tempSMTPPassword = str(jsonData['optional']['smtpPassword'])
+        tempSMTPSSLRequired = str(jsonData['optional']['smtpsslrequired'])
+        tempSMTPPort = str(jsonData['optional']['smtpport'])
         if tempSMTPSendError.lower() == "true":
             if len(tempSMTPServer) > 0 and len(tempEmailRecipient) > 0:
                 blnSendSMTPErrorReport = True
@@ -156,3 +172,107 @@ if "udmRemoteBackupDirectory" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: Remote backup directory of " + jsonData['optional']['udmRemoteBackupDirectory'] + " configured in config file is invalid, using default")
 
 LogWrite(detailLogger, "Info: Beginning process to backup UDM Pro via scp at " + strUDMIPHostname + " with " + strUDMUsername + ", copying " + strUDMRemoteBackupDirectory + " to " + jsonData['required']['localBackupDirectory'])
+
+#start actual backup process.  note that the scp and paramiko python modules are required, which usually require the ubuntu pip package to be installed
+#sudo apt-get install python3-pip
+#sudo pip3 install scp
+#sudo pip3 install paramiko
+try:
+    ssh = paramiko.SSHClient()
+    ssh.load_system_host_keys()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(hostname=strUDMIPHostname, username=strUDMUsername, password=strUDMPassword)
+    scp = SCPClient(ssh.get_transport())
+    scp.get(strUDMRemoteBackupDirectory, jsonData['required']['localBackupDirectory'], recursive=True)
+    scp.close()
+    blnBackupSuccessful = True
+except:
+    LogWrite(detailLogger, "Error: Failed to backup udm pro via scp at " + strUDMIPHostname + " with " + strUDMUsername + ", copying " + strUDMRemoteBackupDirectory + " to " + jsonData['required']['localBackupDirectory'])
+    lstErrors.append("Failed to backup udm pro via scp at " + strUDMIPHostname + " with " + strUDMUsername + ", copying " + strUDMRemoteBackupDirectory + " to " + jsonData['required']['localBackupDirectory'])
+
+if blnBackupSuccessful == True and intDaysToKeepUDMBackups > 0:
+    intXDaysAgo = time.time() - (intDaysToKeepUDMBackups * 86400)
+    strPathToCheck = jsonData['required']['localBackupDirectory'] + "\autobackup"
+    LogWrite(detailLogger, "Info: Purging backups older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
+    try: 
+        for i in os-listdir(strPathToCheck):
+            strFileToRemove = os.path.join(strPathToCheck, i)
+
+            if os.stat(strFileToRemove).st_mtime <= intXDaysAgo:
+                if os.path.isfile(strFileToRemove):
+                    print(strFileToRemove)
+    except:
+        LogWrite(detailLogger, "Error: Failed to purge backup files older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
+        lstErrors.append("Failed to purge backup files older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
+
+if intDaysToKeepLogFiles > 0:
+    intXDaysAgo = time.time() - (intDaysToKeepLogFiles * 86400)
+    strPathToCheck = jsonData['optional']['logsDirectory']
+    LogWrite(detailLogger, "Info: Purging logs older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
+    try:
+        for i in os-listdir(strPathToCheck):
+            strFileToRemove = os.path.join(strPathToCheck, i)
+
+            if os.stat(strFileToRemove).st_mtime <= intXDaysAgo:
+                if os.path.isfile(strFileToRemove):
+                    print(strFileToRemove)
+    except:
+        LogWrite(detailLogger, "Error: Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
+        lstErrors.append("Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
+
+lstErrors.append("Test error")
+print(len(lstErrors))
+
+print(tempSMTPSendError)
+
+
+if tempSMTPSendError == "true" and len(lstErrors) > 0:
+    if len(tempSMTPServer) > 0 and len(tempSMTPUsername) > 0 and len(tempEmailRecipient) > 0:
+        blnSendSMTPErrorReport = True
+        LogWrite(detailLogger, "Info: Encountered " + str(len(lstErrors)) + " errors, sending error report email")
+        intErrorCounter = 0
+        strEmailBody = ""
+        for item in lstErrors:
+            intErrorCounter = intErrorCounter +1
+            strEmailBody = strEmailBody + str(intErrorCounter) + ") " + item + "`n"
+        strEmaillBody = strEmailBody + "`n`nPlease see " + strDetailLogFilePath + "on " + strServerName + " for more details"
+
+        LogWrite(detailLogger, "Info: Sending email error report via " + tempSMTPServer + " from " + tempSMTPUsername + " to " + tempEmailRecipient + " as specified in config file")
+        if tempSMTPAuthRequied.lower() == "true":
+            #send authenticated message
+            if tempSMTPSSLRequired.lower() == "true":
+                #send authenticated message with ssl
+
+                msg = MIMEText(strEmailBody)
+
+                msg['Subject'] = '<<UDM Pro Backup>> Errors during process'
+                msg['From'] = tempSMTPUsername 
+                msg['To'] = tempEmailRecipient
+                
+
+                context = ssl.create_default_context()
+                with smtplib.SMTP(tempSMTPServer, intSMTPPort) as server:
+                    server.ehlo()  # Can be omitted
+                    server.starttls(context=context)
+                    server.ehlo()  # Can be omitted
+                    server.login(tempSMTPUsername, tempSMTPPassword)
+                    server.sendmail(tempSMTPUsername, tempEmailRecipient, msg.as_string())
+
+
+                LogWrite(detailLogger, "Info: Email report successfully sent")
+            else:
+                #send authenticated message without ssl
+                msg = MIMEText(strEmailBody)
+
+                msg['Subject'] = '<<UDM Pro Backup>> Errors during process'
+                msg['From'] = tempSMTPUsername
+                msg['To'] = tempEmailRecipient
+
+                server.login(tempSMTPUsername, tempSMTPPassword)
+                server.sendmail(tempSMTPUsername, tempEmailRecipient, msg.as_string())
+                server.quit()
+                print('mail successfully sent')
+                LogWrite(detailLogger, "Info: Email successfully sent")
+
+LogWrite(detailLogger, "Info: Process Complete")
+            
