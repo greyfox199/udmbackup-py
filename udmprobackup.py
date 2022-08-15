@@ -220,12 +220,6 @@ if intDaysToKeepLogFiles > 0:
         LogWrite(detailLogger, "Error: Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
         lstErrors.append("Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
 
-lstErrors.append("Test error")
-print(len(lstErrors))
-
-print(tempSMTPSendError)
-
-
 if tempSMTPSendError == "true" and len(lstErrors) > 0:
     if len(tempSMTPServer) > 0 and len(tempSMTPUsername) > 0 and len(tempEmailRecipient) > 0:
         blnSendSMTPErrorReport = True
