@@ -80,7 +80,7 @@ lstErrors = []
 detailLogger = None
 
 #if the logs directory is present in the config and the directory exists, enable logging and create a log file
-if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logsDirectory']):
+if "logsDirectory" in jsonData and exists(jsonData['optional']['logsDirectory']):
     blnWriteToLog = True
     strTimeStamp = datetime.now().strftime("%Y-%m-%d-%H_%M_%S")
     strDetailLogFilePath = str(jsonData['optional']['logsDirectory']) + "/udmpro-backup-detail-" + strTimeStamp + ".log"
@@ -96,7 +96,7 @@ def LogWrite(detailLogger, strLogString, blnDisplayInConsole=True):
         detailLogger.info(strLogString)
 
 #if daysToKeepUDMBackups is set and is a valid integer from 0 to 65534, attempt to use it for backup retention
-if "daysToKeepUDMBackups" in jsonData['optional']:
+if "daysToKeepUDMBackups" in jsonData:
     try:
         tempDaysToKeepUDMBackups = int(jsonData['optional']['daysToKeepUDMBackups'])
         if tempDaysToKeepUDMBackups >= 0 and tempDaysToKeepUDMBackups <= 65534:
@@ -108,7 +108,7 @@ if "daysToKeepUDMBackups" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: " + jsonData['optional']['daysToKeepUDMBackups'] + " value specified in config file is not valid, defaulting to unlimited backup retention")
 
 #if daysToKeepLogFiles is set and is a valid integet from 0 to 65534, attempt to use it for log file retention
-if "daysToKeepLogFiles" in jsonData['optional']:
+if "daysToKeepLogFiles" in jsonData:
     try:
         tempDaysToKeepLogFiles = int(jsonData['optional']['daysToKeepLogFiles'])
         if tempDaysToKeepLogFiles >= 0 and tempDaysToKeepLogFiles <= 65534:
@@ -120,7 +120,7 @@ if "daysToKeepLogFiles" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: " + jsonData['optional']['daysToKeepLogFiles'] + " value specified in config file is not valid, defaulting to unlimited log retention")
     
 #if smtp port is set and is a valid integer between 0 and 65534, use it to set the smtp port for email error reporting
-if "smtpport" in jsonData['optional']:
+if "smtpport" in jsonData:
     try:
         tempSMTPPort = int(jsonData['optional']['smtpport'])
         if tempSMTPPort >= 0 and tempSMTPPort <= 65534:
@@ -132,7 +132,7 @@ if "smtpport" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: " + jsonData['optional']['smtpport'] + " value specified in config file is not valid, defaulting to " + str(intSMTPPort))
     
 #there are several options for sending email, so if the sendEmailError option is set in the config file, try to get other smtp-related options
-if "sendEmailError" in jsonData['optional']:
+if "sendEmailError" in jsonData:
     try:
         tempSMTPSendError = str(jsonData['optional']['sendEmailError'])
         tempSMTPServer = str(jsonData['optional']['smtpServer'])
@@ -155,7 +155,7 @@ if "sendEmailError" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: Invalid email configuration data, not sending email report")
 
 #if the udmUsername is set, use it as a string, overriding the default value
-if "udmUsername" in jsonData['optional']:
+if "udmUsername" in jsonData:
     try:
         strUDMUsername = str(jsonData['optional']['udmUsername'])
         LogWrite(detailLogger, "Info: username of " + jsonData['optional']['udmUsername'] + " configured in config file, overriding default")
@@ -163,7 +163,7 @@ if "udmUsername" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: username of " + jsonData['optional']['udmUsername'] + " configured in config file is invalid, using default")
 
 #if udmIPHostname is set, use it as a string, overriding the default value
-if "udmIPHostname" in jsonData['optional']:
+if "udmIPHostname" in jsonData:
     try:
         strUDMIPHostname = str(jsonData['optional']['udmIPHostname'])
         LogWrite(detailLogger, "Info: IP address/hostname of " + jsonData['optional']['udmIPHostname'] + " of UDMP Pro configured in config file, overriding default")
@@ -171,7 +171,7 @@ if "udmIPHostname" in jsonData['optional']:
         LogWrite(detailLogger, "Warning: IP address/hostname of " + jsonData['optional']['udmIPHostname'] + " configured in config file is invalid, using default")
 
 #if udmRemoteBackupDirectory is set, overriding the default value
-if "udmRemoteBackupDirectory" in jsonData['optional']:
+if "udmRemoteBackupDirectory" in jsonData:
     try:
         strUDMRemoteBackupDirectory = str(jsonData['optional']['udmRemoteBackupDirectory'])
         LogWrite(detailLogger, "Info: Remote backup directory of " + jsonData['optional']['udmRemoteBackupDirectory'] + " for UDMP Pro configured in config file, overriding default")
@@ -231,7 +231,7 @@ if intDaysToKeepLogFiles > 0:
 
 #we logged errors to the lstErrors list, so if it has any entries and tempSMTPSendError is set to true, attempt to send email error report
 #we have a few checks if ssl is required or not
-if tempSMTPSendError == "true" and len(lstErrors) > 0:
+if blnSendSMTPErrorReport == "true" and len(lstErrors) > 0:
     if len(tempSMTPServer) > 0 and len(tempSMTPUsername) > 0 and len(tempEmailRecipient) > 0:
         blnSendSMTPErrorReport = True
         LogWrite(detailLogger, "Info: Encountered " + str(len(lstErrors)) + " errors, sending error report email")
