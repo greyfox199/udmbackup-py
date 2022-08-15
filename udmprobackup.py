@@ -15,11 +15,10 @@ argumentList = sys.argv[1:]
  
 # Options
 options = "hc:"
-
 ConfigFilePath = ""
-
 long_options = ["Help", "ConfigFilePath"]
 
+#get command line arguments
 try:
     # Parsing argument
     arguments, values = getopt.getopt(argumentList, options, long_options)
@@ -35,19 +34,21 @@ except getopt.error as err:
     # output error, and return with an error code
     print(str(err))
 
+#we require a json config file, so if it doesn't exist, abort
 if not exists(ConfigFilePath):
     print("json config file specified at " + ConfigFilePath + " does not exist, aborting process")
     exit()
 
+#open config file and check that it's a valid json file, if its not, abort
 objConfigFile = open (ConfigFilePath, "r")
-
 try:
     jsonData = json.loads(objConfigFile.read())
 except:
     print("Config file of " + ConfigFilePath + " is not a valid json file, aborting process")
     exit()
 
-
+#now that we know we have a valid json file, try to extract some parameters from the file
+#the password for the udm file is required, so check for it and abort if its not present
 if "udmPassword" in jsonData["required"]:
     try:
         strUDMPassword = str(jsonData['required']['udmPassword'])
@@ -55,11 +56,12 @@ if "udmPassword" in jsonData["required"]:
         print("required field for password to udm does not exist, aborting proces")
         exit()
 
+#the local backup directory is required, so check for it and abort if its not present
 if not exists(jsonData['required']['localBackupDirectory']):
     print("local backup path of " + jsonData['required']['localBackupDirectory'] + "does not exist, aborting process")
     exit()
 
-
+#we're done with the required fields, so set some variables for use later on
 strServerName = socket.gethostname()
 
 intDaysToKeepUDMBackups = 0
@@ -76,6 +78,7 @@ blnWriteToLog = False
 intSMTPPort = 587
 lstErrors = []
 
+#if the logs directory is present in the config and the directory exists, enable logging and create a log file
 if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logsDirectory']):
     blnWriteToLog = True
     strTimeStamp = datetime.now().strftime("%Y-%m-%d-%H_%M_%S")
@@ -84,12 +87,13 @@ if "logsDirectory" in jsonData['optional'] and exists(jsonData['optional']['logs
     detailLogger=logging.getLogger()
     detailLogger.setLevel(logging.INFO)
 
+#function to write to log file and optionally display message in console
 def LogWrite(detailLogger, strLogString, blnDisplayInConsole=True):
     if blnDisplayInConsole:
         print(strLogString)
     detailLogger.info(strLogString)
 
-#configure days to keep local backup retention
+#if daysToKeepUDMBackups is set and is a valid integer from 0 to 65534, attempt to use it for backup retention
 if "daysToKeepUDMBackups" in jsonData['optional']:
     try:
         tempDaysToKeepUDMBackups = int(jsonData['optional']['daysToKeepUDMBackups'])
@@ -101,7 +105,7 @@ if "daysToKeepUDMBackups" in jsonData['optional']:
     except:
         LogWrite(detailLogger, "Warning: " + jsonData['optional']['daysToKeepUDMBackups'] + " value specified in config file is not valid, defaulting to unlimited backup retention")
 
-#configure days to keep log files
+#if daysToKeepLogFiles is set and is a valid integet from 0 to 65534, attempt to use it for log file retention
 if "daysToKeepLogFiles" in jsonData['optional']:
     try:
         tempDaysToKeepLogFiles = int(jsonData['optional']['daysToKeepLogFiles'])
@@ -113,7 +117,7 @@ if "daysToKeepLogFiles" in jsonData['optional']:
     except:
         LogWrite(detailLogger, "Warning: " + jsonData['optional']['daysToKeepLogFiles'] + " value specified in config file is not valid, defaulting to unlimited log retention")
     
-#configure smtp port
+#if smtp port is set and is a valid integer between 0 and 65534, use it to set the smtp port for email error reporting
 if "smtpport" in jsonData['optional']:
     try:
         tempSMTPPort = int(jsonData['optional']['smtpport'])
@@ -125,9 +129,7 @@ if "smtpport" in jsonData['optional']:
     except:
         LogWrite(detailLogger, "Warning: " + jsonData['optional']['smtpport'] + " value specified in config file is not valid, defaulting to " + str(intSMTPPort))
     
-
-
-
+#there are several options for sending email, so if the sendEmailError option is set in the config file, try to get other smtp-related options
 if "sendEmailError" in jsonData['optional']:
     try:
         tempSMTPSendError = str(jsonData['optional']['sendEmailError'])
@@ -150,6 +152,7 @@ if "sendEmailError" in jsonData['optional']:
     except:
         LogWrite(detailLogger, "Warning: Invalid email configuration data, not sending email report")
 
+#if the udmUsername is set, use it as a string, overriding the default value
 if "udmUsername" in jsonData['optional']:
     try:
         strUDMUsername = str(jsonData['optional']['udmUsername'])
@@ -157,6 +160,7 @@ if "udmUsername" in jsonData['optional']:
     except:
         LogWrite(detailLogger, "Warning: username of " + jsonData['optional']['udmUsername'] + " configured in config file is invalid, using default")
 
+#if udmIPHostname is set, use it as a string, overriding the default value
 if "udmIPHostname" in jsonData['optional']:
     try:
         strUDMIPHostname = str(jsonData['optional']['udmIPHostname'])
@@ -164,6 +168,7 @@ if "udmIPHostname" in jsonData['optional']:
     except:
         LogWrite(detailLogger, "Warning: IP address/hostname of " + jsonData['optional']['udmIPHostname'] + " configured in config file is invalid, using default")
 
+#if udmRemoteBackupDirectory is set, overriding the default value
 if "udmRemoteBackupDirectory" in jsonData['optional']:
     try:
         strUDMRemoteBackupDirectory = str(jsonData['optional']['udmRemoteBackupDirectory'])
@@ -190,6 +195,7 @@ except:
     LogWrite(detailLogger, "Error: Failed to backup udm pro via scp at " + strUDMIPHostname + " with " + strUDMUsername + ", copying " + strUDMRemoteBackupDirectory + " to " + jsonData['required']['localBackupDirectory'])
     lstErrors.append("Failed to backup udm pro via scp at " + strUDMIPHostname + " with " + strUDMUsername + ", copying " + strUDMRemoteBackupDirectory + " to " + jsonData['required']['localBackupDirectory'])
 
+#if the backup was successful and intDaysToKeepUDMBackups is a valid non 0 integer, manage backup retention
 if blnBackupSuccessful == True and intDaysToKeepUDMBackups > 0:
     intXDaysAgo = time.time() - (intDaysToKeepUDMBackups * 86400)
     strPathToCheck = jsonData['required']['localBackupDirectory'] + "\autobackup"
@@ -205,6 +211,7 @@ if blnBackupSuccessful == True and intDaysToKeepUDMBackups > 0:
         LogWrite(detailLogger, "Error: Failed to purge backup files older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
         lstErrors.append("Failed to purge backup files older than " + intDaysToKeepUDMBackups + " days from " + strPathToCheck)
 
+#if intDaysToKeepLogFiles is a valid non 0 integer, manage log file retention
 if intDaysToKeepLogFiles > 0:
     intXDaysAgo = time.time() - (intDaysToKeepLogFiles * 86400)
     strPathToCheck = jsonData['optional']['logsDirectory']
@@ -220,6 +227,8 @@ if intDaysToKeepLogFiles > 0:
         LogWrite(detailLogger, "Error: Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
         lstErrors.append("Failed to purge log files older than " + intDaysToKeepLogFiles + " days from " + strPathToCheck)
 
+#we logged errors to the lstErrors list, so if it has any entries and tempSMTPSendError is set to true, attempt to send email error report
+#we have a few checks if ssl is required or not
 if tempSMTPSendError == "true" and len(lstErrors) > 0:
     if len(tempSMTPServer) > 0 and len(tempSMTPUsername) > 0 and len(tempEmailRecipient) > 0:
         blnSendSMTPErrorReport = True
@@ -253,7 +262,7 @@ if tempSMTPSendError == "true" and len(lstErrors) > 0:
                     server.sendmail(tempSMTPUsername, tempEmailRecipient, msg.as_string())
 
 
-                LogWrite(detailLogger, "Info: Email report successfully sent")
+                LogWrite(detailLogger, "Info: Email error report successfully sent")
             else:
                 #send authenticated message without ssl
                 msg = MIMEText(strEmailBody)
@@ -266,7 +275,8 @@ if tempSMTPSendError == "true" and len(lstErrors) > 0:
                 server.sendmail(tempSMTPUsername, tempEmailRecipient, msg.as_string())
                 server.quit()
                 print('mail successfully sent')
-                LogWrite(detailLogger, "Info: Email successfully sent")
+                LogWrite(detailLogger, "Info: Email error report successfully sent")
 
+#we're finally done with the process, so log one final entry marking completion
 LogWrite(detailLogger, "Info: Process Complete")
             
